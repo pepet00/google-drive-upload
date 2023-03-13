@@ -44,7 +44,7 @@ _all_accounts() {
         _account_exists "${account}" &&
             { [ "${COUNT}" = 0 ] && "${QUIET:-_print_center}" "normal" " All available accounts. " "=" || :; } &&
             printf "%b" "$((COUNT += 1)). ${account} \n" && _set_value direct "ACC_${COUNT}_ACC" "${account}"
-    done 4<< EOF
+    done 4<<EOF
 $(grep -oE '^ACCOUNT_.*_CLIENT_ID' -- "${CONFIG}" | sed -e "s/ACCOUNT_//g" -e "s/_CLIENT_ID//g")
 EOF
     { [ "${COUNT}" -le 0 ] && "${QUIET:-_print_center}" "normal" " No accounts configured yet. " "=" 1>&2; } || printf '\n'
@@ -64,7 +64,7 @@ _set_new_account_name() {
     _reload_config || return 1
     new_account_name_set_new_account_name="${1:-}" && unset name_valid_set_new_account_name
     [ -z "${new_account_name_set_new_account_name}" ] && {
-        _all_accounts 2>| /dev/null
+        _all_accounts 2>|/dev/null
         "${QUIET:-_print_center}" "normal" " New account name: " "="
         "${QUIET:-_print_center}" "normal" "Info: Account names can only contain alphabets / numbers / dashes." " " && printf '\n'
     }
@@ -107,7 +107,7 @@ _delete_account() {
         regex_delete_account="^ACCOUNT_${account_delete_account}_(CLIENT_ID=|CLIENT_SECRET=|REFRESH_TOKEN=|ROOT_FOLDER=|ROOT_FOLDER_NAME=|ACCESS_TOKEN=|ACCESS_TOKEN_EXPIRY=)|DEFAULT_ACCOUNT=\"${account_delete_account}\""
         config_without_values_delete_account="$(grep -vE "${regex_delete_account}" -- "${CONFIG}")"
         chmod u+w -- "${CONFIG}" || return 1 # change perms to edit
-        printf "%s\n" "${config_without_values_delete_account}" >| "${CONFIG}" || return 1
+        printf "%s\n" "${config_without_values_delete_account}" >|"${CONFIG}" || return 1
         chmod "a-w-r-x,u+r" -- "${CONFIG}" || return 1 # restore perms
         "${QUIET:-_print_center}" "normal" " Successfully deleted account ( ${account_delete_account} ) from config. " "-"
     else
@@ -139,7 +139,7 @@ _handle_old_config() {
             "ACCOUNT_${account_name_handle_old_config}_REFRESH_TOKEN=\"${REFRESH_TOKEN}\"" \
             "ACCOUNT_${account_name_handle_old_config}_ROOT_FOLDER=\"${ROOT_FOLDER}\"" \
             "ACCOUNT_${account_name_handle_old_config}_ROOT_FOLDER_NAME=\"${ROOT_FOLDER_NAME}\"" \
-            "${config_without_values_handle_old_config}" >| "${CONFIG}" || return 1
+            "${config_without_values_handle_old_config}" >|"${CONFIG}" || return 1
 
         chmod "a-w-r-x,u+r" -- "${CONFIG}" || return 1 # restore perms
 
@@ -186,7 +186,7 @@ _check_credentials() {
         # in case no account name was set
         if [ -z "${ACCOUNT_NAME}" ]; then
             # if accounts are configured but default account is not set
-            if _all_accounts 2>| /dev/null && [ "${COUNT}" -gt 0 ]; then
+            if _all_accounts 2>|/dev/null && [ "${COUNT}" -gt 0 ]; then
                 # when only 1 account is configured, then set it as default
                 if [ "${COUNT}" -eq 1 ]; then
                     _set_value indirect ACCOUNT_NAME "ACC_1_ACC" # ACC_1_ACC comes from _all_accounts function
@@ -350,8 +350,8 @@ _check_refresh_token() {
         done
 
         # https://docs.python.org/3/library/http.server.html
-        if command -v python 1> /dev/null && python -V | grep -q 'Python 3'; then
-            python << EOF 1> "${TMPFILE}.code" 2>&1 &
+        if command -v python 1>/dev/null && python -V | grep -q 'Python 3'; then
+            python <<EOF 1>"${TMPFILE}.code" 2>&1 &
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class handler(BaseHTTPRequestHandler):
@@ -366,9 +366,9 @@ with HTTPServer(('', ${server_port_check_refresh_token}), handler) as server:
     server.handle_request()
 EOF
             _tmp_server_pid="${!}"
-        elif command -v nc 1> /dev/null; then
+        elif command -v nc 1>/dev/null; then
             # https://stackoverflow.com/a/58436505
-            printf "%b" "HTTP/1.1 200 OK\nContent-Length: $(printf "%s" "${server_string_check_refresh_token}" | wc -c)\n\n${server_string_check_refresh_token}" | nc -l -p "${server_port_check_refresh_token}" 1> "${TMPFILE}.code" 2>&1 &
+            printf "%b" "HTTP/1.1 200 OK\nContent-Length: $(printf "%s" "${server_string_check_refresh_token}" | wc -c)\n\n${server_string_check_refresh_token}" | nc -l -p "${server_port_check_refresh_token}" 1>"${TMPFILE}.code" 2>&1 &
             _tmp_server_pid="${!}"
         else
             "${QUIET:-_print_center}" "normal" " Error: neither netcat (nc) nor python3 is installed. It is required to required a http server which is used in fetching authorization code. Install and proceed." "-"
@@ -379,14 +379,15 @@ EOF
         code_challenge_check_refresh_token="$(_epoch)authorization_code"
         [ -z "${refresh_token_value_check_refresh_token}" ] && {
             printf "\n" && "${QUIET:-_print_center}" "normal" "Visit the below URL, follow the instructions and then come back to commandline" " "
-            URL="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}%3A${server_port_check_refresh_token}&scope=${SCOPE}&response_type=code&code_challenge_method=plain&code_challenge=${code_challenge_check_refresh_token}"
+            # URL="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}%3A${server_port_check_refresh_token}&scope=${SCOPE}&response_type=code&code_challenge_method=plain&code_challenge=${code_challenge_check_refresh_token}"
+            URL="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}%3A${server_port_check_refresh_token}&scope=${SCOPE}&response_type=code&access_type=offline"
             printf "\n%s\n" "${URL}"
 
             "${QUIET:-_print_center}" "normal" " Press enter if you have completed the process in browser" "-"
             read -r _
-            kill "${_tmp_server_pid}" 1>| /dev/null 2>&1 || :
+            kill "${_tmp_server_pid}" 1>|/dev/null 2>&1 || :
 
-            if ! authorization_code="$(grep -m1 'GET.*code.*HTTP/1.1' < "${TMPFILE}.code" | sed -e 's/.*GET.*code=//' -e 's/\&.*//')" &&
+            if ! authorization_code="$(grep -m1 'GET.*code.*HTTP/1.1' <"${TMPFILE}.code" | sed -e 's/.*GET.*code=//' -e 's/\&.*//')" &&
                 _assert_regex "${authorization_code_regex}" "${authorization_code}"; then
                 "${QUIET:-_print_center}" "normal" " Code was not fetched properly , here is some info that maybe helpful.. " "-"
                 "${QUIET:-_print_center}" "normal" " Code that was grabbed: ${authorization_code} " "-"
@@ -399,7 +400,7 @@ EOF
 
             # https://developers.google.com/identity/protocols/oauth2/native-app#handlingresponse
             response_check_refresh_token="$(curl --compressed "${CURL_PROGRESS}" -X POST \
-                --data "code=${authorization_code}&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&redirect_uri=${REDIRECT_URI}%3A${server_port_check_refresh_token}&grant_type=authorization_code&code_verifier=${code_challenge_check_refresh_token}" "${TOKEN_URL}")" || :
+                --data "code=${authorization_code}&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&redirect_uri=${REDIRECT_URI}%3A${server_port_check_refresh_token}&grant_type=authorization_code" "${TOKEN_URL}")" || :
             _clear_line 1 1>&2
 
             refresh_token_value_check_refresh_token="$(printf "%s\n" "${response_check_refresh_token}" | _json_value refresh_token 1 1)" ||
@@ -474,7 +475,7 @@ _check_access_token() {
 ###################################################
 _reload_config() {
     export CONFIG
-    { [ -r "${CONFIG}" ] && _parse_config "${CONFIG}"; } || { printf "" >> "${CONFIG}" || return 1; }
+    { [ -r "${CONFIG}" ] && _parse_config "${CONFIG}"; } || { printf "" >>"${CONFIG}" || return 1; }
     return 0
 }
 
@@ -487,9 +488,9 @@ _reload_config() {
 _token_bg_service() {
     export MAIN_PID ACCESS_TOKEN ACCESS_TOKEN_EXPIRY TMPFILE
     [ -z "${MAIN_PID}" ] && return 0 # don't start if MAIN_PID is empty
-    printf "%b\n" "ACCESS_TOKEN=\"${ACCESS_TOKEN}\"\nACCESS_TOKEN_EXPIRY=\"${ACCESS_TOKEN_EXPIRY}\"" >| "${TMPFILE}_ACCESS_TOKEN"
+    printf "%b\n" "ACCESS_TOKEN=\"${ACCESS_TOKEN}\"\nACCESS_TOKEN_EXPIRY=\"${ACCESS_TOKEN_EXPIRY}\"" >|"${TMPFILE}_ACCESS_TOKEN"
     {
-        until ! kill -0 "${MAIN_PID}" 2>| /dev/null 1>&2; do
+        until ! kill -0 "${MAIN_PID}" 2>|/dev/null 1>&2; do
             . "${TMPFILE}_ACCESS_TOKEN"
             CURRENT_TIME="$(_epoch)"
             REMAINING_TOKEN_TIME="$((ACCESS_TOKEN_EXPIRY - CURRENT_TIME))"
